@@ -1,14 +1,18 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"smiles/model"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,9 +23,6 @@ const (
 	readFromFile            = false
 	useCommandLineArguments = true
 	mockResponseFilePath    = "data/response.json"
-	daysToQuery             = 3
-	departureDate           = "2024-04-01"
-	returnDate              = "2024-04-25"
 	dateLayout              = "2006-01-02"
 	cabinType               = "all"
 	maxStops                = 1
@@ -30,9 +31,40 @@ const (
 
 func main() {
 
+	var daysToQuery int
+	var departureDate string
+	var returnDate string
+	scanner := bufio.NewScanner(os.Stdin)
+
+	fmt.Print("Ingrese el número de días a consultar: ")
+	scanner.Scan()
+	daysToQuery, _ = strconv.Atoi(scanner.Text())
+
+	fmt.Print("Ingrese la fecha de salida (YYYY-MM-DD): ")
+	scanner.Scan()
+	departureDate = scanner.Text()
+
+	fmt.Print("Ingrese la fecha de regreso (YYYY-MM-DD): ")
+	scanner.Scan()
+	returnDate = scanner.Text()
 	// Define los origines y destinos a buscar
-	origins := []string{"SCL"}      // ejemplo de valores
-	destinations := []string{"MAD"} // ejemplo de valores
+	fmt.Print("Ingrese los origenes separados por comas o espacios")
+	scanner.Scan()
+	input := scanner.Text()
+
+	// Dividir la entrada en elementos individuales
+	origins := strings.FieldsFunc(input, func(c rune) bool {
+		return c == ' ' || c == ','
+	})
+
+	fmt.Print("Ingrese los destinos separados por comas o espacios")
+	scanner.Scan()
+	input = scanner.Text()
+
+	// Dividir la entrada en elementos individuales
+	destinations := strings.FieldsFunc(input, func(c rune) bool {
+		return c == ' ' || c == ','
+	})
 
 	c := http.Client{}
 
