@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"os"
 	"smiles/model"
 	"sort"
 	"sync"
@@ -20,11 +19,11 @@ const (
 	readFromFile            = false
 	useCommandLineArguments = true
 	mockResponseFilePath    = "data/response.json"
-	daysToQuery             = 1
-	departureDate           = "2023-06-12"
-	returnDate              = "2023-06-25"
+	daysToQuery             = 3
+	departureDate           = "2024-04-01"
+	returnDate              = "2024-04-25"
 	dateLayout              = "2006-01-02"
-	cabinType               = "business"
+	cabinType               = "all"
 	maxStops                = 1
 	bigMaxMilesNumber       = 9_999_999
 )
@@ -32,10 +31,8 @@ const (
 func main() {
 
 	// Define los origines y destinos a buscar
-	//origins := []string{"SCL", "MVD", "GRU"}                    // ejemplo de valores
-	//destinations := []string{"CDG", "MAD", "LHR", "FCO", "ORY"} // ejemplo de valores
-	origins := []string{"EZE", "SCL", "MVD"} // ejemplo de valores
-	destinations := []string{"MIA", "MCO"}   // ejemplo de valores
+	origins := []string{"SCL"}      // ejemplo de valores
+	destinations := []string{"MAD"} // ejemplo de valores
 
 	c := http.Client{}
 
@@ -119,26 +116,14 @@ func makeRequest(wg *sync.WaitGroup, ch chan<- model.Result, c *http.Client, sta
 	u := createURL(startingDate.Format(dateLayout), originAirport, destinationAirport) // Encode and assign back to the original query.
 	req := createRequest(u, "api-air-flightsearch-prd.smiles.com.br")
 
-	//fmt.Println("Making request with URL: ", req.URL.String())
-	//fmt.Printf("Consultando %s - %s para el día %s \n", originAirport, destinationAirport, startingDate.Format(dateLayout))
+	res, err := c.Do(req)
+	if err != nil {
+		log.Fatal("Error making request ", err)
+	}
 
-	// only for dev purposes
-	if readFromFile {
-		fmt.Println("Reading from file ", mockResponseFilePath)
-		body, err = os.ReadFile(mockResponseFilePath)
-		if err != nil {
-			log.Fatal("error reading file")
-		}
-	} else {
-		res, err := c.Do(req)
-		if err != nil {
-			log.Fatal("Error making request ", err)
-		}
-
-		body, err = ioutil.ReadAll(res.Body)
-		if body == nil {
-			log.Fatal("Empty result")
-		}
+	body, err = ioutil.ReadAll(res.Body)
+	if body == nil {
+		log.Fatal("Empty result")
 	}
 
 	if err := json.Unmarshal(body, &data); err != nil {
@@ -177,7 +162,6 @@ func createURL(departureDate string, originAirport string, destinationAirport st
 	q.Add("destinationAirportCode", destinationAirport)
 	q.Add("cabinType", cabinType)
 	u.RawQuery = q.Encode()
-	println(u.RawQuery)
 	return u
 }
 
@@ -209,14 +193,14 @@ func getSmilesClubFare(f *model.Flight) *model.Fare {
 
 func processResults(c *http.Client, r []model.Result) {
 	// using the first flight as cheapest default
-	var cheapestFlight *model.Flight
+	var cheapestFlight model.Flight
 	cheapestFare := &model.Fare{
 		Miles: bigMaxMilesNumber,
 	}
 
 	// loop through all results
 	for _, v := range r {
-		var cheapestFlightDay *model.Flight
+		var cheapestFlightDay model.Flight
 		cheapestFareDay := &model.Fare{
 			Miles: bigMaxMilesNumber,
 		}
@@ -226,7 +210,7 @@ func processResults(c *http.Client, r []model.Result) {
 			for _, f := range v.Data.RequestedFlightSegmentList[0].FlightList {
 				smilesClubFare := getSmilesClubFare(&f)
 				if cheapestFareDay.Miles > smilesClubFare.Miles {
-					cheapestFlightDay = &f
+					cheapestFlightDay = f
 					cheapestFareDay = smilesClubFare
 				}
 			}
@@ -252,18 +236,27 @@ func processResults(c *http.Client, r []model.Result) {
 
 	fmt.Println()
 	if cheapestFare.Miles != bigMaxMilesNumber {
-		boardingTax := getTaxForFlight(c, cheapestFlight, cheapestFare)
+		boardingTax := getTaxForFlight(c, &cheapestFlight, cheapestFare)
 
-		fmt.Printf("Vuelo más barato en estas fechas: %s, %s - %s, %s, %s, %d escalas, %d millas, ARS %f %f de Tasas e impuestos\n",
+		fmt.Printf("Vuelo más barato en estas fecha: %s",
 			cheapestFlight.Departure.Date.Format(dateLayout),
+		)
+		fmt.Println()
+		fmt.Printf("AEROPUERTOS: %s - %s",
 			cheapestFlight.Departure.Airport.Code,
 			cheapestFlight.Arrival.Airport.Code,
+		)
+		fmt.Println()
+		fmt.Printf("AVION: %s, %s, %d escalas",
 			cheapestFlight.Cabin,
 			cheapestFlight.Airline.Name,
 			cheapestFlight.Stops,
+		)
+		fmt.Println()
+		fmt.Printf("PRECIO: %d millas, %d millas totales aprox, ARS %f\n",
 			cheapestFare.Miles,
-			float64(cheapestFare.Miles)*1.4,
-			boardingTax.Totals.Total.Money,
+			boardingTax.Totals.Total.Miles,
+			float64(cheapestFare.Miles)*1.4+float64(boardingTax.Totals.Total.Money),
 		)
 
 	}
