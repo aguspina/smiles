@@ -20,18 +20,22 @@ const (
 	readFromFile            = false
 	useCommandLineArguments = true
 	mockResponseFilePath    = "data/response.json"
-	daysToQuery             = 1 // example value
-	departureDate           = "2023-09-13"
-	returnDate              = "2023-10-25"
+	daysToQuery             = 1
+	departureDate           = "2023-06-12"
+	returnDate              = "2023-06-25"
 	dateLayout              = "2006-01-02"
+	cabinType               = "business"
+	maxStops                = 1
 	bigMaxMilesNumber       = 9_999_999
 )
 
 func main() {
 
 	// Define los origines y destinos a buscar
-	origins := []string{"IGU", "SCL", "MVD", "EZE"} // ejemplo de valores
-	destinations := []string{"MAD", "BCN", "LHR"}   // ejemplo de valores
+	//origins := []string{"SCL", "MVD", "GRU"}                    // ejemplo de valores
+	//destinations := []string{"CDG", "MAD", "LHR", "FCO", "ORY"} // ejemplo de valores
+	origins := []string{"EZE", "SCL", "MVD"} // ejemplo de valores
+	destinations := []string{"MIA", "MCO"}   // ejemplo de valores
 
 	c := http.Client{}
 
@@ -50,6 +54,7 @@ func main() {
 		progressbar.OptionSetRenderBlankState(true),
 	)
 
+	fmt.Println()
 	start := time.Now()
 	var wg sync.WaitGroup
 
@@ -163,14 +168,16 @@ func createURL(departureDate string, originAirport string, destinationAirport st
 	u := url.URL{
 		Scheme:   "https",
 		Host:     "api-air-flightsearch-prd.smiles.com.br",
-		RawQuery: "adults=1&cabinType=all&children=0&currencyCode=ARS&infants=0&isFlexibleDateChecked=false&tripType=2&forceCongener=true&r=ar",
+		RawQuery: "adults=1&children=0&currencyCode=ARS&infants=0&isFlexibleDateChecked=false&tripType=2&forceCongener=true&r=ar",
 		Path:     "/v1/airlines/search",
 	}
 	q := u.Query()
 	q.Add("departureDate", departureDate)
 	q.Add("originAirportCode", originAirport)
 	q.Add("destinationAirportCode", destinationAirport)
+	q.Add("cabinType", cabinType)
 	u.RawQuery = q.Encode()
+	println(u.RawQuery)
 	return u
 }
 
@@ -215,11 +222,13 @@ func processResults(c *http.Client, r []model.Result) {
 		}
 
 		// loop through all flights by day
-		for _, f := range v.Data.RequestedFlightSegmentList[0].FlightList {
-			smilesClubFare := getSmilesClubFare(&f)
-			if cheapestFareDay.Miles > smilesClubFare.Miles {
-				cheapestFlightDay = &f
-				cheapestFareDay = smilesClubFare
+		if len(v.Data.RequestedFlightSegmentList) > 0 {
+			for _, f := range v.Data.RequestedFlightSegmentList[0].FlightList {
+				smilesClubFare := getSmilesClubFare(&f)
+				if cheapestFareDay.Miles > smilesClubFare.Miles {
+					cheapestFlightDay = &f
+					cheapestFareDay = smilesClubFare
+				}
 			}
 		}
 
@@ -245,7 +254,7 @@ func processResults(c *http.Client, r []model.Result) {
 	if cheapestFare.Miles != bigMaxMilesNumber {
 		boardingTax := getTaxForFlight(c, cheapestFlight, cheapestFare)
 
-		fmt.Printf("Vuelo más barato en estas fechas: %s, %s - %s, %s, %s, %d escalas, %d millas, %f de Tasas e impuestos\n",
+		fmt.Printf("Vuelo más barato en estas fechas: %s, %s - %s, %s, %s, %d escalas, %d millas, ARS %f %f de Tasas e impuestos\n",
 			cheapestFlight.Departure.Date.Format(dateLayout),
 			cheapestFlight.Departure.Airport.Code,
 			cheapestFlight.Arrival.Airport.Code,
@@ -253,6 +262,7 @@ func processResults(c *http.Client, r []model.Result) {
 			cheapestFlight.Airline.Name,
 			cheapestFlight.Stops,
 			cheapestFare.Miles,
+			float64(cheapestFare.Miles)*1.4,
 			boardingTax.Totals.Total.Money,
 		)
 
