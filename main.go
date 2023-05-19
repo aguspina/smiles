@@ -48,7 +48,7 @@ func main() {
 	scanner.Scan()
 	returnDate = scanner.Text()
 	// Define los origines y destinos a buscar
-	fmt.Print("Ingrese los origenes separados por comas o espacios")
+	fmt.Print("Ingrese los origenes separados por comas o espacios: ")
 	scanner.Scan()
 	input := scanner.Text()
 
@@ -57,7 +57,7 @@ func main() {
 		return c == ' ' || c == ','
 	})
 
-	fmt.Print("Ingrese los destinos separados por comas o espacios")
+	fmt.Print("Ingrese los destinos separados por comas o espacios: ")
 	scanner.Scan()
 	input = scanner.Text()
 
